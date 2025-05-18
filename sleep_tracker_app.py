@@ -5,13 +5,42 @@ from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import pandas as pd
+import seaborn as sns
+from matplotlib.figure import Figure
+import numpy as np
+
+# Style constants
+COLORS = {
+    'primary': '#2c3e50',      # Dark blue-gray
+    'secondary': '#3498db',    # Bright blue
+    'accent': '#e74c3c',       # Red
+    'success': '#2ecc71',      # Green
+    'background': '#ecf0f1',   # Light gray
+    'text': '#2c3e50',         # Dark blue-gray
+    'white': '#ffffff',        # White
+    'light_blue': '#e3f2fd',   # Very light blue
+    'light_green': '#e8f5e9',  # Very light green
+    'light_red': '#ffebee',    # Very light red
+    'border': '#dcdde1'        # Light gray for borders
+}
+
+FONTS = {
+    'title': ('Helvetica', 24, 'bold'),
+    'header': ('Helvetica', 18, 'bold'),
+    'subheader': ('Helvetica', 14, 'bold'),
+    'body': ('Helvetica', 12),
+    'small': ('Helvetica', 10)
+}
 
 class SleepTrackerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Sleep Tracker")
-        self.root.geometry("800x600")
-        self.root.configure(bg="#f0f0f0")
+        self.root.geometry("1200x800")  # Increased window size
+        self.root.configure(bg=COLORS['background'])
+        
+        # Configure ttk styles
+        self.configure_styles()
         
         # Initialize database
         self.init_database()
@@ -21,10 +50,131 @@ class SleepTrackerApp:
         self.is_logged_in = False
         
         # Create authentication frame
-        self.auth_frame = ttk.Frame(self.root, padding=20)
+        self.auth_frame = ttk.Frame(self.root, padding=20, style='Card.TFrame')
         self.auth_frame.pack(fill=tk.BOTH, expand=True)
         
         self.show_login_screen()
+    
+    def configure_styles(self):
+        """Configure ttk styles for the application."""
+        style = ttk.Style()
+        
+        # Configure theme
+        style.theme_use('clam')
+        
+        # Configure colors
+        style.configure('TFrame', background=COLORS['background'])
+        style.configure('Card.TFrame', 
+                       background=COLORS['white'], 
+                       relief='solid', 
+                       borderwidth=1,
+                       bordercolor=COLORS['border'])
+        
+        # Configure labels
+        style.configure('Title.TLabel', 
+                       font=FONTS['title'], 
+                       foreground=COLORS['primary'], 
+                       background=COLORS['background'])
+        style.configure('Header.TLabel', 
+                       font=FONTS['header'], 
+                       foreground=COLORS['primary'], 
+                       background=COLORS['background'])
+        style.configure('Subheader.TLabel', 
+                       font=FONTS['subheader'], 
+                       foreground=COLORS['primary'], 
+                       background=COLORS['background'])
+        style.configure('Body.TLabel', 
+                       font=FONTS['body'], 
+                       foreground=COLORS['text'], 
+                       background=COLORS['background'])
+        style.configure('Value.TLabel',
+                       font=FONTS['body'],
+                       foreground=COLORS['secondary'],
+                       background=COLORS['background'])
+        
+        # Configure buttons
+        style.configure('Primary.TButton', 
+                       font=FONTS['body'],
+                       background=COLORS['secondary'],
+                       foreground=COLORS['white'],
+                       padding=10,
+                       borderwidth=0)
+        style.configure('Success.TButton',
+                       font=FONTS['body'],
+                       background=COLORS['success'],
+                       foreground=COLORS['white'],
+                       padding=10,
+                       borderwidth=0)
+        style.configure('Danger.TButton',
+                       font=FONTS['body'],
+                       background=COLORS['accent'],
+                       foreground=COLORS['white'],
+                       padding=10,
+                       borderwidth=0)
+        
+        # Configure notebook
+        style.configure('TNotebook', 
+                       background=COLORS['background'],
+                       borderwidth=0)
+        style.configure('TNotebook.Tab', 
+                       font=FONTS['body'],
+                       padding=[20, 10],
+                       background=COLORS['white'],
+                       borderwidth=0)
+        style.map('TNotebook.Tab',
+                 background=[('selected', COLORS['secondary'])],
+                 foreground=[('selected', COLORS['white'])])
+        
+        # Configure labelframes
+        style.configure('Card.TLabelframe', 
+                       font=FONTS['subheader'],
+                       background=COLORS['white'],
+                       foreground=COLORS['primary'],
+                       borderwidth=1,
+                       bordercolor=COLORS['border'])
+        style.configure('Card.TLabelframe.Label', 
+                       font=FONTS['subheader'],
+                       background=COLORS['white'],
+                       foreground=COLORS['primary'])
+        
+        # Configure entry
+        style.configure('TEntry', 
+                       font=FONTS['body'],
+                       padding=5,
+                       fieldbackground=COLORS['white'],
+                       borderwidth=1,
+                       bordercolor=COLORS['border'])
+        
+        # Configure combobox
+        style.configure('TCombobox', 
+                       font=FONTS['body'],
+                       padding=5,
+                       fieldbackground=COLORS['white'],
+                       borderwidth=1,
+                       bordercolor=COLORS['border'])
+        
+        # Configure treeview
+        style.configure('Treeview',
+                       font=FONTS['body'],
+                       background=COLORS['white'],
+                       fieldbackground=COLORS['white'],
+                       rowheight=30,
+                       borderwidth=1,
+                       bordercolor=COLORS['border'])
+        style.configure('Treeview.Heading',
+                       font=FONTS['body'],
+                       background=COLORS['secondary'],
+                       foreground=COLORS['white'],
+                       borderwidth=0)
+        style.map('Treeview',
+                 background=[('selected', COLORS['light_blue'])],
+                 foreground=[('selected', COLORS['primary'])])
+        
+        # Configure scale
+        style.configure('TScale',
+                       background=COLORS['white'],
+                       troughcolor=COLORS['secondary'],
+                       borderwidth=0)
     
     def init_database(self):
         """Initialize the SQLite database with required tables."""
@@ -95,19 +245,23 @@ class SleepTrackerApp:
         for widget in self.auth_frame.winfo_children():
             widget.destroy()
         
-        # Create login widgets
-        ttk.Label(self.auth_frame, text="Sleep Tracker", font=("Arial", 20)).pack(pady=10)
+        # Create login container
+        login_container = ttk.Frame(self.auth_frame, style='Card.TFrame', padding=30)
+        login_container.place(relx=0.5, rely=0.5, anchor='center')
         
-        ttk.Label(self.auth_frame, text="Username:").pack(pady=5)
-        self.username_entry = ttk.Entry(self.auth_frame, width=30)
+        # Create login widgets
+        ttk.Label(login_container, text="Sleep Tracker", style='Title.TLabel').pack(pady=(0, 20))
+        
+        ttk.Label(login_container, text="Username:", style='Body.TLabel').pack(pady=(10, 5))
+        self.username_entry = ttk.Entry(login_container, width=30, font=FONTS['body'])
         self.username_entry.pack(pady=5)
         
-        ttk.Label(self.auth_frame, text="Password:").pack(pady=5)
-        self.password_entry = ttk.Entry(self.auth_frame, width=30, show="*")
+        ttk.Label(login_container, text="Password:", style='Body.TLabel').pack(pady=(10, 5))
+        self.password_entry = ttk.Entry(login_container, width=30, show="*", font=FONTS['body'])
         self.password_entry.pack(pady=5)
         
-        ttk.Button(self.auth_frame, text="Login", command=self.login).pack(pady=10)
-        ttk.Button(self.auth_frame, text="Register", command=self.show_register_screen).pack(pady=5)
+        ttk.Button(login_container, text="Login", command=self.login, style='Primary.TButton').pack(pady=(20, 10))
+        ttk.Button(login_container, text="Register", command=self.show_register_screen, style='Secondary.TButton').pack(pady=5)
     
     def show_register_screen(self):
         """Display the registration screen."""
@@ -233,18 +387,18 @@ class SleepTrackerApp:
         for widget in self.dashboard_frame.winfo_children():
             widget.destroy()
         
-        ttk.Label(self.dashboard_frame, text="Sleep Dashboard", font=("Arial", 16)).pack(pady=10)
+        ttk.Label(self.dashboard_frame, text="Sleep Dashboard", style='Header.TLabel').pack(pady=20)
         
         # Create left and right frames for layout
-        left_frame = ttk.Frame(self.dashboard_frame)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        left_frame = ttk.Frame(self.dashboard_frame, style='Card.TFrame', padding=15)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        right_frame = ttk.Frame(self.dashboard_frame)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5)
+        right_frame = ttk.Frame(self.dashboard_frame, style='Card.TFrame', padding=15)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         # Summary stats in left frame
-        stats_frame = ttk.LabelFrame(left_frame, text="Sleep Summary", padding=10)
-        stats_frame.pack(fill=tk.X, pady=5)
+        stats_frame = ttk.LabelFrame(left_frame, text="Sleep Summary", style='Card.TLabelframe', padding=15)
+        stats_frame.pack(fill=tk.X, pady=10)
         
         # Get sleep data
         try:
@@ -278,43 +432,55 @@ class SleepTrackerApp:
             
             conn.close()
             
-            # Display stats
+            # Display stats with improved styling
             if avg_duration:
                 avg_hours = round(avg_duration / 60, 1)
-                ttk.Label(stats_frame, text=f"Average Sleep Duration (7 days): {avg_hours} hours").pack(anchor="w", pady=2)
+                ttk.Label(stats_frame, text=f"Average Sleep Duration (7 days): {avg_hours} hours", 
+                         style='Body.TLabel').pack(anchor="w", pady=5)
             else:
-                ttk.Label(stats_frame, text="Average Sleep Duration (7 days): No data").pack(anchor="w", pady=2)
+                ttk.Label(stats_frame, text="Average Sleep Duration (7 days): No data", 
+                         style='Body.TLabel').pack(anchor="w", pady=5)
             
             if avg_quality:
-                ttk.Label(stats_frame, text=f"Average Sleep Quality (7 days): {round(avg_quality, 1)}/10").pack(anchor="w", pady=2)
+                ttk.Label(stats_frame, text=f"Average Sleep Quality (7 days): {round(avg_quality, 1)}/10", 
+                         style='Body.TLabel').pack(anchor="w", pady=5)
             else:
-                ttk.Label(stats_frame, text="Average Sleep Quality (7 days): No data").pack(anchor="w", pady=2)
+                ttk.Label(stats_frame, text="Average Sleep Quality (7 days): No data", 
+                         style='Body.TLabel').pack(anchor="w", pady=5)
             
             if last_session:
                 start_time = datetime.strptime(last_session[0], "%Y-%m-%d %H:%M:%S")
                 end_time = datetime.strptime(last_session[1], "%Y-%m-%d %H:%M:%S") if last_session[1] else "In progress"
                 duration = f"{round(last_session[2] / 60, 1)} hours" if last_session[2] else "In progress"
                 
-                ttk.Label(stats_frame, text=f"Last Sleep Session:").pack(anchor="w", pady=2)
-                ttk.Label(stats_frame, text=f"  Start: {start_time.strftime('%Y-%m-%d %H:%M')}").pack(anchor="w", pady=2)
-                ttk.Label(stats_frame, text=f"  End: {end_time.strftime('%Y-%m-%d %H:%M') if isinstance(end_time, datetime) else end_time}").pack(anchor="w", pady=2)
-                ttk.Label(stats_frame, text=f"  Duration: {duration}").pack(anchor="w", pady=2)
+                ttk.Label(stats_frame, text="Last Sleep Session:", 
+                         style='Subheader.TLabel').pack(anchor="w", pady=(10, 5))
+                ttk.Label(stats_frame, text=f"  Start: {start_time.strftime('%Y-%m-%d %H:%M')}", 
+                         style='Body.TLabel').pack(anchor="w", pady=2)
+                ttk.Label(stats_frame, text=f"  End: {end_time.strftime('%Y-%m-%d %H:%M') if isinstance(end_time, datetime) else end_time}", 
+                         style='Body.TLabel').pack(anchor="w", pady=2)
+                ttk.Label(stats_frame, text=f"  Duration: {duration}", 
+                         style='Body.TLabel').pack(anchor="w", pady=2)
             else:
-                ttk.Label(stats_frame, text="Last Sleep Session: No data").pack(anchor="w", pady=2)
+                ttk.Label(stats_frame, text="Last Sleep Session: No data", 
+                         style='Body.TLabel').pack(anchor="w", pady=5)
         
         except Exception as e:
-            ttk.Label(stats_frame, text=f"Error retrieving sleep data: {e}").pack(anchor="w", pady=2)
+            ttk.Label(stats_frame, text=f"Error retrieving sleep data: {e}", 
+                     style='Body.TLabel').pack(anchor="w", pady=5)
         
         # Quick actions in left frame
-        actions_frame = ttk.LabelFrame(left_frame, text="Quick Actions", padding=10)
-        actions_frame.pack(fill=tk.X, pady=5)
+        actions_frame = ttk.LabelFrame(left_frame, text="Quick Actions", style='Card.TLabelframe', padding=15)
+        actions_frame.pack(fill=tk.X, pady=10)
         
-        ttk.Button(actions_frame, text="Start Sleep Session", command=self.start_sleep_session).pack(pady=5)
-        ttk.Button(actions_frame, text="End Current Session", command=self.end_sleep_session).pack(pady=5)
+        ttk.Button(actions_frame, text="Start Sleep Session", command=self.start_sleep_session, 
+                  style='Success.TButton').pack(fill=tk.X, pady=5)
+        ttk.Button(actions_frame, text="End Current Session", command=self.end_sleep_session, 
+                  style='Danger.TButton').pack(fill=tk.X, pady=5)
         
         # Sleep history in right frame
-        history_frame = ttk.LabelFrame(right_frame, text="Recent Sleep History", padding=10)
-        history_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        history_frame = ttk.LabelFrame(right_frame, text="Recent Sleep History", style='Card.TLabelframe', padding=15)
+        history_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         
         # Create treeview for sleep records
         columns = ("date", "start_time", "end_time", "duration", "quality")
@@ -343,23 +509,25 @@ class SleepTrackerApp:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         # Statistics in right frame
-        stats_frame = ttk.LabelFrame(right_frame, text="Sleep Statistics", padding=10)
-        stats_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        stats_frame = ttk.LabelFrame(right_frame, text="Sleep Statistics", style='Card.TLabelframe', padding=15)
+        stats_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         
         # Time range selection
         range_frame = ttk.Frame(stats_frame)
-        range_frame.pack(fill=tk.X, pady=5)
+        range_frame.pack(fill=tk.X, pady=10)
         
-        ttk.Label(range_frame, text="Time Range:").pack(side=tk.LEFT, padx=5)
+        ttk.Label(range_frame, text="Time Range:", style='Body.TLabel').pack(side=tk.LEFT, padx=5)
         self.time_range = ttk.Combobox(range_frame, width=15, 
-                                     values=["Last 7 Days", "Last 30 Days", "Last 90 Days", "All Time"])
+                                     values=["Last 7 Days", "Last 30 Days", "Last 90 Days", "All Time"],
+                                     font=FONTS['body'])
         self.time_range.pack(side=tk.LEFT, padx=5)
         self.time_range.set("Last 7 Days")
         
-        ttk.Button(range_frame, text="Generate Statistics", command=self.generate_statistics).pack(side=tk.LEFT, padx=5)
+        ttk.Button(range_frame, text="Generate Statistics", command=self.generate_statistics,
+                  style='Primary.TButton').pack(side=tk.LEFT, padx=5)
         
         # Frame for charts
-        self.charts_frame = ttk.Frame(stats_frame)
+        self.charts_frame = ttk.Frame(stats_frame, style='Card.TFrame')
         self.charts_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         
         # Load initial data
@@ -496,30 +664,34 @@ class SleepTrackerApp:
             conn.close()
             
             if df.empty:
-                ttk.Label(self.charts_frame, text="No sleep data available for selected time range").pack(pady=20)
+                ttk.Label(self.charts_frame, text="No sleep data available for selected time range",
+                         style='Body.TLabel').pack(pady=20)
                 return
             
             # Convert duration from minutes to hours
             df['duration'] = df['duration'] / 60
             
             # Create figure with subplots
-            fig = plt.figure(figsize=(10, 8))
+            fig = Figure(figsize=(10, 8), dpi=100)
+            fig.patch.set_facecolor(COLORS['white'])
             
             # Sleep duration over time
             ax1 = fig.add_subplot(2, 1, 1)
-            ax1.plot(df['date'], df['duration'], 'b-', marker='o')
-            ax1.set_title('Sleep Duration Over Time')
-            ax1.set_ylabel('Hours')
-            ax1.set_xlabel('Date')
-            ax1.grid(True)
+            ax1.plot(df['date'], df['duration'], 'o-', color=COLORS['secondary'], linewidth=2, markersize=8)
+            ax1.set_title('Sleep Duration Over Time', fontsize=14, pad=20)
+            ax1.set_ylabel('Hours', fontsize=12)
+            ax1.set_xlabel('Date', fontsize=12)
+            ax1.grid(True, linestyle='--', alpha=0.7)
+            ax1.set_facecolor(COLORS['white'])
             
             # Sleep quality over time
             ax2 = fig.add_subplot(2, 1, 2)
-            ax2.plot(df['date'], df['rating'], 'g-', marker='o')
-            ax2.set_title('Sleep Quality Over Time')
-            ax2.set_ylabel('Quality Rating (1-10)')
-            ax2.set_xlabel('Date')
-            ax2.grid(True)
+            ax2.plot(df['date'], df['rating'], 'o-', color=COLORS['success'], linewidth=2, markersize=8)
+            ax2.set_title('Sleep Quality Over Time', fontsize=14, pad=20)
+            ax2.set_ylabel('Quality Rating (1-10)', fontsize=12)
+            ax2.set_xlabel('Date', fontsize=12)
+            ax2.grid(True, linestyle='--', alpha=0.7)
+            ax2.set_facecolor(COLORS['white'])
             
             # Adjust layout
             plt.tight_layout()
@@ -527,35 +699,93 @@ class SleepTrackerApp:
             # Embed in tkinter
             canvas = FigureCanvasTkAgg(fig, master=self.charts_frame)
             canvas.draw()
-            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
             
             # Summary statistics
-            summary_frame = ttk.LabelFrame(self.charts_frame, text="Summary Statistics", padding=10)
-            summary_frame.pack(fill=tk.X, pady=10)
+            summary_frame = ttk.LabelFrame(self.charts_frame, text="Summary Statistics", 
+                                         style='Card.TLabelframe', padding=15)
+            summary_frame.pack(fill=tk.X, pady=10, padx=10)
             
+            # Create a grid layout for statistics
+            stats_grid = ttk.Frame(summary_frame)
+            stats_grid.pack(fill=tk.X, pady=5)
+            
+            # Calculate statistics
             avg_duration = df['duration'].mean()
             avg_quality = df['rating'].mean()
             correlation = df['duration'].corr(df['rating']) if len(df) > 1 else None
             
-            ttk.Label(summary_frame, text=f"Average Sleep Duration: {avg_duration:.2f} hours").pack(anchor="w", pady=2)
-            ttk.Label(summary_frame, text=f"Average Sleep Quality: {avg_quality:.2f}/10").pack(anchor="w", pady=2)
+            # Duration stats
+            duration_frame = ttk.Frame(stats_grid, style='Card.TFrame', padding=10)
+            duration_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+            ttk.Label(duration_frame, text="Average Sleep Duration", 
+                     style='Subheader.TLabel').pack(anchor="w")
+            ttk.Label(duration_frame, text=f"{avg_duration:.2f} hours", 
+                     style='Value.TLabel').pack(anchor="w")
             
+            # Quality stats
+            quality_frame = ttk.Frame(stats_grid, style='Card.TFrame', padding=10)
+            quality_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+            ttk.Label(quality_frame, text="Average Sleep Quality", 
+                     style='Subheader.TLabel').pack(anchor="w")
+            ttk.Label(quality_frame, text=f"{avg_quality:.2f}/10", 
+                     style='Value.TLabel').pack(anchor="w")
+            
+            # Correlation stats
             if correlation is not None:
-                ttk.Label(summary_frame, text=f"Correlation between Duration and Quality: {correlation:.2f}").pack(anchor="w", pady=2)
+                corr_frame = ttk.Frame(stats_grid, style='Card.TFrame', padding=10)
+                corr_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+                ttk.Label(corr_frame, text="Duration-Quality Correlation", 
+                         style='Subheader.TLabel').pack(anchor="w")
+                ttk.Label(corr_frame, text=f"{correlation:.2f}", 
+                         style='Value.TLabel').pack(anchor="w")
             
             # Factors analysis
             if 'caffeine_intake' in df.columns and not df['caffeine_intake'].isna().all():
+                factors_frame = ttk.LabelFrame(self.charts_frame, text="Sleep Factors Analysis", 
+                                             style='Card.TLabelframe', padding=15)
+                factors_frame.pack(fill=tk.X, pady=10, padx=10)
+                
+                factors_grid = ttk.Frame(factors_frame)
+                factors_grid.pack(fill=tk.X, pady=5)
+                
+                # Caffeine effect
                 caffeine_effect = df.groupby('caffeine_intake')['duration'].mean()
-                ttk.Label(summary_frame, text=f"Avg. Sleep Duration with Caffeine: {caffeine_effect.get(1, 0):.2f} hours").pack(anchor="w", pady=2)
-                ttk.Label(summary_frame, text=f"Avg. Sleep Duration without Caffeine: {caffeine_effect.get(0, 0):.2f} hours").pack(anchor="w", pady=2)
-            
-            if 'exercise' in df.columns and not df['exercise'].isna().all():
-                exercise_effect = df.groupby('exercise')['duration'].mean()
-                ttk.Label(summary_frame, text=f"Avg. Sleep Duration with Exercise: {exercise_effect.get(1, 0):.2f} hours").pack(anchor="w", pady=2)
-                ttk.Label(summary_frame, text=f"Avg. Sleep Duration without Exercise: {exercise_effect.get(0, 0):.2f} hours").pack(anchor="w", pady=2)
+                caffeine_frame = ttk.Frame(factors_grid, style='Card.TFrame', padding=10)
+                caffeine_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+                ttk.Label(caffeine_frame, text="With Caffeine", 
+                         style='Subheader.TLabel').pack(anchor="w")
+                ttk.Label(caffeine_frame, text=f"{caffeine_effect.get(1, 0):.2f} hours", 
+                         style='Value.TLabel').pack(anchor="w")
+                
+                # No caffeine effect
+                no_caffeine_frame = ttk.Frame(factors_grid, style='Card.TFrame', padding=10)
+                no_caffeine_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+                ttk.Label(no_caffeine_frame, text="Without Caffeine", 
+                         style='Subheader.TLabel').pack(anchor="w")
+                ttk.Label(no_caffeine_frame, text=f"{caffeine_effect.get(0, 0):.2f} hours", 
+                         style='Value.TLabel').pack(anchor="w")
+                
+                # Exercise effect
+                if 'exercise' in df.columns and not df['exercise'].isna().all():
+                    exercise_effect = df.groupby('exercise')['duration'].mean()
+                    exercise_frame = ttk.Frame(factors_grid, style='Card.TFrame', padding=10)
+                    exercise_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+                    ttk.Label(exercise_frame, text="With Exercise", 
+                             style='Subheader.TLabel').pack(anchor="w")
+                    ttk.Label(exercise_frame, text=f"{exercise_effect.get(1, 0):.2f} hours", 
+                             style='Value.TLabel').pack(anchor="w")
+                    
+                    no_exercise_frame = ttk.Frame(factors_grid, style='Card.TFrame', padding=10)
+                    no_exercise_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+                    ttk.Label(no_exercise_frame, text="Without Exercise", 
+                             style='Subheader.TLabel').pack(anchor="w")
+                    ttk.Label(no_exercise_frame, text=f"{exercise_effect.get(0, 0):.2f} hours", 
+                             style='Value.TLabel').pack(anchor="w")
         
         except Exception as e:
-            ttk.Label(self.charts_frame, text=f"Error generating statistics: {e}").pack(pady=20)
+            ttk.Label(self.charts_frame, text=f"Error generating statistics: {e}", 
+                     style='Body.TLabel').pack(pady=20)
     
     def load_sleep_history(self):
         """Load sleep history into the treeview."""
