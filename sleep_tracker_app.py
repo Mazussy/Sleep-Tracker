@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import sqlite3
+import pyodbc
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -8,6 +9,16 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.figure import Figure
 import numpy as np
+
+# SQL Server connection
+def connect_to_db():
+    return pyodbc.connect(
+        "DRIVER={ODBC Driver 18 for SQL Server};"
+        "SERVER=DESKTOP-6TSK0HA;"  # Update as needed
+        "DATABASE=SleepTracker;"
+        "Trusted_Connection=yes;"
+        "TrustServerCertificate=yes;" 
+    )
 
 # Style constants
 COLORS = {
@@ -177,32 +188,34 @@ class SleepTrackerApp:
                        borderwidth=0)
     
     def init_database(self):
-        """Initialize the SQLite database with required tables."""
+        """Initialize the SQL Server database with required tables."""
         try:
-            # Connect to database (creates it if it doesn't exist)
-            conn = sqlite3.connect('sleep_tracker.db')
+            # Connect to database
+            conn = connect_to_db()
             cursor = conn.cursor()
             
             # Create Users table
             cursor.execute('''
-            CREATE TABLE IF NOT EXISTS Users (
-                user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                name TEXT,
-                email TEXT,
-                date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Users' AND xtype='U')
+            CREATE TABLE Users (
+                user_id INT IDENTITY(1,1) PRIMARY KEY,
+                username NVARCHAR(50) UNIQUE NOT NULL,
+                password NVARCHAR(100) NOT NULL,
+                name NVARCHAR(100),
+                email NVARCHAR(100),
+                date_created DATETIME DEFAULT GETDATE()
             )
             ''')
             
             # Create Sleep_Sessions table
             cursor.execute('''
-            CREATE TABLE IF NOT EXISTS Sleep_Sessions (
-                session_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                sleep_start_time TIMESTAMP NOT NULL,
-                sleep_end_time TIMESTAMP,
-                duration INTEGER,
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Sleep_Sessions' AND xtype='U')
+            CREATE TABLE Sleep_Sessions (
+                session_id INT IDENTITY(1,1) PRIMARY KEY,
+                user_id INT NOT NULL,
+                sleep_start_time DATETIME NOT NULL,
+                sleep_end_time DATETIME,
+                duration INT,
                 date DATE NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES Users (user_id)
             )
@@ -210,25 +223,27 @@ class SleepTrackerApp:
             
             # Create Sleep_Quality table
             cursor.execute('''
-            CREATE TABLE IF NOT EXISTS Sleep_Quality (
-                quality_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id INTEGER NOT NULL,
-                rating INTEGER CHECK (rating >= 1 AND rating <= 10),
-                times_woken INTEGER DEFAULT 0,
-                notes TEXT,
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Sleep_Quality' AND xtype='U')
+            CREATE TABLE Sleep_Quality (
+                quality_id INT IDENTITY(1,1) PRIMARY KEY,
+                session_id INT NOT NULL,
+                rating INT CHECK (rating >= 1 AND rating <= 10),
+                times_woken INT DEFAULT 0,
+                notes NVARCHAR(MAX),
                 FOREIGN KEY (session_id) REFERENCES Sleep_Sessions (session_id)
             )
             ''')
             
             # Create Sleep_Factors table
             cursor.execute('''
-            CREATE TABLE IF NOT EXISTS Sleep_Factors (
-                factor_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id INTEGER NOT NULL,
-                caffeine_intake BOOLEAN DEFAULT 0,
-                exercise BOOLEAN DEFAULT 0,
-                screen_time_before_bed INTEGER DEFAULT 0,
-                stress_level INTEGER CHECK (stress_level >= 1 AND stress_level <= 10),
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Sleep_Factors' AND xtype='U')
+            CREATE TABLE Sleep_Factors (
+                factor_id INT IDENTITY(1,1) PRIMARY KEY,
+                session_id INT NOT NULL,
+                caffeine_intake BIT DEFAULT 0,
+                exercise BIT DEFAULT 0,
+                screen_time_before_bed INT DEFAULT 0,
+                stress_level INT CHECK (stress_level >= 1 AND stress_level <= 10),
                 FOREIGN KEY (session_id) REFERENCES Sleep_Sessions (session_id)
             )
             ''')
@@ -303,7 +318,7 @@ class SleepTrackerApp:
             return
         
         try:
-            conn = sqlite3.connect('sleep_tracker.db')
+            conn = connect_to_db()
             cursor = conn.cursor()
             
             # Check if username already exists
@@ -336,7 +351,7 @@ class SleepTrackerApp:
             return
         
         try:
-            conn = sqlite3.connect('sleep_tracker.db')
+            conn = connect_to_db()
             cursor = conn.cursor()
             
             cursor.execute(
@@ -372,43 +387,50 @@ class SleepTrackerApp:
         self.dashboard_frame = ttk.Frame(self.notebook, padding=10)
         self.notebook.add(self.dashboard_frame, text="Dashboard")
         
+        # Create history tab
+        self.history_frame = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(self.history_frame, text="History")
+        
+        # Create statistics tab
+        self.statistics_frame = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(self.statistics_frame, text="Statistics")
+        
         # Create record sleep tab
         self.create_record_sleep_tab()
         
         # Initialize dashboard
         self.update_dashboard()
+        self.update_history_tab()
+        self.update_statistics_tab()
         
         # Logout button
         ttk.Button(self.main_frame, text="Logout", command=self.logout).pack(pady=10)
     
     def update_dashboard(self):
-        """Update the dashboard with current sleep data."""
+        """Update the dashboard with current sleep data (summary and quick actions only)."""
         # Clear existing widgets
         for widget in self.dashboard_frame.winfo_children():
             widget.destroy()
         
         ttk.Label(self.dashboard_frame, text="Sleep Dashboard", style='Header.TLabel').pack(pady=20)
         
-        # Create left and right frames for layout
+        # Create left frame for summary and quick actions
         left_frame = ttk.Frame(self.dashboard_frame, style='Card.TFrame', padding=15)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        right_frame = ttk.Frame(self.dashboard_frame, style='Card.TFrame', padding=15)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        # Summary stats in left frame
+        # Summary stats
         stats_frame = ttk.LabelFrame(left_frame, text="Sleep Summary", style='Card.TLabelframe', padding=15)
         stats_frame.pack(fill=tk.X, pady=10)
         
         # Get sleep data
         try:
-            conn = sqlite3.connect('sleep_tracker.db')
+            conn = connect_to_db()
             cursor = conn.cursor()
             
             # Get average sleep duration for last 7 days
             cursor.execute('''
             SELECT AVG(duration) FROM Sleep_Sessions
-            WHERE user_id = ? AND date >= date('now', '-7 days')
+            WHERE user_id = ? AND date >= DATEADD(day, -7, GETDATE())
             ''', (self.current_user_id,))
             avg_duration = cursor.fetchone()[0]
             
@@ -416,17 +438,16 @@ class SleepTrackerApp:
             cursor.execute('''
             SELECT AVG(sq.rating) FROM Sleep_Quality sq
             JOIN Sleep_Sessions ss ON sq.session_id = ss.session_id
-            WHERE ss.user_id = ? AND ss.date >= date('now', '-7 days')
+            WHERE ss.user_id = ? AND ss.date >= DATEADD(day, -7, GETDATE())
             ''', (self.current_user_id,))
             avg_quality = cursor.fetchone()[0]
             
             # Get last sleep session
             cursor.execute('''
-            SELECT sleep_start_time, sleep_end_time, duration
+            SELECT TOP 1 sleep_start_time, sleep_end_time, duration
             FROM Sleep_Sessions
             WHERE user_id = ?
             ORDER BY sleep_start_time DESC
-            LIMIT 1
             ''', (self.current_user_id,))
             last_session = cursor.fetchone()
             
@@ -449,8 +470,8 @@ class SleepTrackerApp:
                          style='Body.TLabel').pack(anchor="w", pady=5)
             
             if last_session:
-                start_time = datetime.strptime(last_session[0], "%Y-%m-%d %H:%M:%S")
-                end_time = datetime.strptime(last_session[1], "%Y-%m-%d %H:%M:%S") if last_session[1] else "In progress"
+                start_time = last_session[0]
+                end_time = last_session[1] if last_session[1] else "In progress"
                 duration = f"{round(last_session[2] / 60, 1)} hours" if last_session[2] else "In progress"
                 
                 ttk.Label(stats_frame, text="Last Sleep Session:", 
@@ -469,69 +490,59 @@ class SleepTrackerApp:
             ttk.Label(stats_frame, text=f"Error retrieving sleep data: {e}", 
                      style='Body.TLabel').pack(anchor="w", pady=5)
         
-        # Quick actions in left frame
+        # Quick actions
         actions_frame = ttk.LabelFrame(left_frame, text="Quick Actions", style='Card.TLabelframe', padding=15)
         actions_frame.pack(fill=tk.X, pady=10)
+        ttk.Button(actions_frame, text="Start Sleep Session", command=self.start_sleep_session, style='Success.TButton').pack(fill=tk.X, pady=5)
+        ttk.Button(actions_frame, text="End Current Session", command=self.end_sleep_session, style='Danger.TButton').pack(fill=tk.X, pady=5)
+    
+    def update_history_tab(self):
+        """Update the history tab with the sleep records treeview."""
+        for widget in self.history_frame.winfo_children():
+            widget.destroy()
         
-        ttk.Button(actions_frame, text="Start Sleep Session", command=self.start_sleep_session, 
-                  style='Success.TButton').pack(fill=tk.X, pady=5)
-        ttk.Button(actions_frame, text="End Current Session", command=self.end_sleep_session, 
-                  style='Danger.TButton').pack(fill=tk.X, pady=5)
+        ttk.Label(self.history_frame, text="Sleep History", style='Header.TLabel').pack(pady=20)
         
-        # Sleep history in right frame
-        history_frame = ttk.LabelFrame(right_frame, text="Recent Sleep History", style='Card.TLabelframe', padding=15)
+        history_frame = ttk.LabelFrame(self.history_frame, text="Recent Sleep History", style='Card.TLabelframe', padding=15)
         history_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         
-        # Create treeview for sleep records
         columns = ("date", "start_time", "end_time", "duration", "quality")
-        self.history_tree = ttk.Treeview(history_frame, columns=columns, show="headings", height=6)
-        
-        # Define headings
+        self.history_tree = ttk.Treeview(history_frame, columns=columns, show="headings", height=12)
         self.history_tree.heading("date", text="Date")
         self.history_tree.heading("start_time", text="Start Time")
         self.history_tree.heading("end_time", text="End Time")
         self.history_tree.heading("duration", text="Duration (hrs)")
         self.history_tree.heading("quality", text="Quality (1-10)")
-        
-        # Define columns
         self.history_tree.column("date", width=100)
         self.history_tree.column("start_time", width=100)
         self.history_tree.column("end_time", width=100)
         self.history_tree.column("duration", width=100)
         self.history_tree.column("quality", width=100)
-        
-        # Add scrollbar
         scrollbar = ttk.Scrollbar(history_frame, orient=tk.VERTICAL, command=self.history_tree.yview)
         self.history_tree.configure(yscroll=scrollbar.set)
-        
-        # Pack treeview and scrollbar
         self.history_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.load_sleep_history()
+    
+    def update_statistics_tab(self):
+        """Update the statistics tab with the sleep statistics charts and summary."""
+        for widget in self.statistics_frame.winfo_children():
+            widget.destroy()
         
-        # Statistics in right frame
-        stats_frame = ttk.LabelFrame(right_frame, text="Sleep Statistics", style='Card.TLabelframe', padding=15)
-        stats_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        ttk.Label(self.statistics_frame, text="Sleep Statistics", style='Header.TLabel').pack(pady=20)
         
         # Time range selection
-        range_frame = ttk.Frame(stats_frame)
+        range_frame = ttk.Frame(self.statistics_frame)
         range_frame.pack(fill=tk.X, pady=10)
-        
         ttk.Label(range_frame, text="Time Range:", style='Body.TLabel').pack(side=tk.LEFT, padx=5)
         self.time_range = ttk.Combobox(range_frame, width=15, 
                                      values=["Last 7 Days", "Last 30 Days", "Last 90 Days", "All Time"],
                                      font=FONTS['body'])
         self.time_range.pack(side=tk.LEFT, padx=5)
         self.time_range.set("Last 7 Days")
-        
-        ttk.Button(range_frame, text="Generate Statistics", command=self.generate_statistics,
-                  style='Primary.TButton').pack(side=tk.LEFT, padx=5)
-        
-        # Frame for charts
-        self.charts_frame = ttk.Frame(stats_frame, style='Card.TFrame')
+        ttk.Button(range_frame, text="Generate Statistics", command=self.generate_statistics, style='Primary.TButton').pack(side=tk.LEFT, padx=5)
+        self.charts_frame = ttk.Frame(self.statistics_frame, style='Card.TFrame')
         self.charts_frame.pack(fill=tk.BOTH, expand=True, pady=10)
-        
-        # Load initial data
-        self.load_sleep_history()
         self.generate_statistics()
     
     def create_record_sleep_tab(self):
@@ -647,7 +658,7 @@ class SleepTrackerApp:
             days_back = 3650  # ~10 years
         
         try:
-            conn = sqlite3.connect('sleep_tracker.db')
+            conn = connect_to_db()
             
             # Get sleep data
             query = f'''
@@ -656,7 +667,7 @@ class SleepTrackerApp:
             FROM Sleep_Sessions ss
             LEFT JOIN Sleep_Quality sq ON ss.session_id = sq.session_id
             LEFT JOIN Sleep_Factors sf ON ss.session_id = sf.session_id
-            WHERE ss.user_id = ? AND ss.date >= date('now', '-{days_back} days')
+            WHERE ss.user_id = ? AND ss.date >= DATEADD(day, -{days_back}, GETDATE())
             ORDER BY ss.date
             '''
             
@@ -694,7 +705,7 @@ class SleepTrackerApp:
             ax2.set_facecolor(COLORS['white'])
             
             # Adjust layout
-            plt.tight_layout()
+            fig.subplots_adjust(hspace=0.4)
             
             # Embed in tkinter
             canvas = FigureCanvasTkAgg(fig, master=self.charts_frame)
@@ -794,7 +805,7 @@ class SleepTrackerApp:
             self.history_tree.delete(item)
         
         try:
-            conn = sqlite3.connect('sleep_tracker.db')
+            conn = connect_to_db()
             cursor = conn.cursor()
             
             # Get sleep records
@@ -812,8 +823,8 @@ class SleepTrackerApp:
             # Insert records into treeview
             for record in records:
                 date = record[0]
-                start_time = datetime.strptime(record[1], "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
-                end_time = datetime.strptime(record[2], "%Y-%m-%d %H:%M:%S").strftime("%H:%M") if record[2] else "In progress"
+                start_time = record[1].strftime("%H:%M")
+                end_time = record[2].strftime("%H:%M") if record[2] else "In progress"
                 duration = f"{record[3] / 60:.2f}" if record[3] else "N/A"
                 quality = record[4] if record[4] else "N/A"
                 
@@ -825,7 +836,7 @@ class SleepTrackerApp:
     def start_sleep_session(self):
         """Start a new sleep session."""
         try:
-            conn = sqlite3.connect('sleep_tracker.db')
+            conn = connect_to_db()
             cursor = conn.cursor()
             
             # Check if there's an active session
@@ -842,8 +853,8 @@ class SleepTrackerApp:
                 return
             
             # Insert new session
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            current_date = datetime.now().strftime("%Y-%m-%d")
+            current_time = datetime.now()
+            current_date = current_time.date()
             
             cursor.execute('''
             INSERT INTO Sleep_Sessions (user_id, sleep_start_time, date)
@@ -865,7 +876,7 @@ class SleepTrackerApp:
     def end_sleep_session(self):
         """End the current sleep session."""
         try:
-            conn = sqlite3.connect('sleep_tracker.db')
+            conn = connect_to_db()
             cursor = conn.cursor()
             
             # Check for active session
@@ -882,9 +893,8 @@ class SleepTrackerApp:
                 return
             
             session_id = active_session[0]
-            start_time = datetime.strptime(active_session[1], "%Y-%m-%d %H:%M:%S")
+            start_time = active_session[1]
             end_time = datetime.now()
-            end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
             
             # Calculate duration in minutes
             duration = int((end_time - start_time).total_seconds() / 60)
@@ -894,14 +904,15 @@ class SleepTrackerApp:
             UPDATE Sleep_Sessions
             SET sleep_end_time = ?, duration = ?
             WHERE session_id = ?
-            ''', (end_time_str, duration, session_id))
+            ''', (end_time, duration, session_id))
             
             conn.commit()
             conn.close()
             
             # Ask for sleep quality data
             self.show_end_session_dialog(session_id, duration)
-            
+            self.update_history_tab()
+        
         except Exception as e:
             messagebox.showerror("Error", f"Failed to end sleep session: {e}")
     
@@ -969,7 +980,7 @@ class SleepTrackerApp:
         
         def save_quality_data():
             try:
-                conn = sqlite3.connect('sleep_tracker.db')
+                conn = connect_to_db()
                 cursor = conn.cursor()
                 
                 # Insert quality data
@@ -994,6 +1005,7 @@ class SleepTrackerApp:
                 
                 # Refresh dashboard
                 self.update_dashboard()
+                self.update_history_tab()
                 
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save sleep data: {e}")
@@ -1019,10 +1031,6 @@ class SleepTrackerApp:
                 if end_time < start_time:
                     end_time += timedelta(days=1)
                 
-                # Format for database
-                start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
-                end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
-                
                 # Calculate duration in minutes
                 duration = int((end_time - start_time).total_seconds() / 60)
                 
@@ -1042,16 +1050,16 @@ class SleepTrackerApp:
             stress_level = int(self.stress_level.get())
             
             # Save to database
-            conn = sqlite3.connect('sleep_tracker.db')
+            conn = connect_to_db()
             cursor = conn.cursor()
             
             # Insert sleep session
             cursor.execute('''
             INSERT INTO Sleep_Sessions (user_id, sleep_start_time, sleep_end_time, duration, date)
             VALUES (?, ?, ?, ?, ?)
-            ''', (self.current_user_id, start_time_str, end_time_str, duration, date_str))
+            ''', (self.current_user_id, start_time, end_time, duration, start_time.date()))
             
-            session_id = cursor.lastrowid
+            session_id = cursor.execute("SELECT SCOPE_IDENTITY()").fetchval()
             
             # Insert quality data
             cursor.execute('''
@@ -1084,6 +1092,7 @@ class SleepTrackerApp:
             
             # Refresh dashboard
             self.update_dashboard()
+            self.update_history_tab()
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save sleep record: {e}")
